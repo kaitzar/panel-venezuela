@@ -550,11 +550,9 @@ async function renderMap() {
   // ── ORANGE: puntos de alivio (geocode Ubicación) ──
   for (const r of fOrange) {
     if (!r.ubicacion) continue;
-    const contacto = [r.contactoNombre, r.contactoInfo].filter(Boolean).join(' — ');
     const popup = `<b style="color:#e65100">Punto de alivio</b><br><b>${esc(r.ubicacion)}</b><br>` +
       `${esc(r.recolecta)}` +
-      (contacto ? `<br>📞 ${esc(contacto)}` : '') +
-      `<br><small>${esc(r.fuente)} · ${r.fecha}</small>`;
+      `<br><small>${r.fecha}</small>`;
     let ll = await geocode(r.ubicacion);
     if (!ll) ll = fallbackLatLng(r.estado, r.ubicacion);
     if (!ll) continue;
@@ -687,18 +685,15 @@ function renderOrangeTable() {
   const el = document.getElementById('table-orange');
   if (!fOrange.length) { el.innerHTML = '<p class="empty-msg">No hay puntos de alivio para los filtros seleccionados.</p>'; return; }
   const html = fOrange.map(r => {
-    const contacto = [r.contactoNombre, r.contactoInfo].filter(Boolean).join(' — ') || '—';
     return `<tr>
       <td>${r.fecha||'—'}</td>
       <td><b>${esc(r.ubicacion)}</b></td>
       <td>${esc(r.recolecta)}</td>
-      <td>${esc(contacto)}</td>
       <td>${esc(r.estado||'—')}</td>
-      <td>${esc(r.fuente||'—')}</td>
     </tr>`;
   }).join('');
   el.innerHTML = `<table><thead><tr>
-    <th>Fecha</th><th>Ubicación</th><th>Qué recolectan</th><th>Contacto</th><th>Estado</th><th>Fuente</th>
+    <th>Fecha</th><th>Ubicación</th><th>Qué recolectan</th><th>Estado</th>
   </tr></thead><tbody>${html}</tbody></table>`;
 }
 
