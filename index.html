@@ -260,31 +260,48 @@ const ESTADO_COORDS = {
 const CATEGORIES = [
   'Salud y atención médica','Agua y saneamiento','Alimentos',
   'Refugio y vivienda','Ropa y artículos del hogar',
-  'Herramientas y rescate','Infraestructura y daños',
+  'Herramientas y rescate','Infraestructura y daños estructurales',
   'Electricidad y comunicación','Transporte y acceso',
-  'Protección de vulnerables','Apoyo psicosocial','Otra',
 ];
 const KEYWORDS = {
-  'Salud y atención médica':           ['medicin','médic','salud','antibiótic','hospital','enfermer','herida','venda','suero','pastilla','doctor','botiquín','primeros auxilios','insulina','cirugía','analgésic','analgesi'],
-  'Agua y saneamiento':                ['agua','potable','saneamiento','higiene','jabón','jabon','filtro','purificad','cloro'],
-  'Alimentos':                         ['aliment','comida','arroz','harina','frijol','pasta','leche','fórmula','formula','nutrici','conserva','sardina','aceite','azúcar','azucar','lata'],
-  'Refugio y vivienda':                ['refugio','albergue','carpa','lona','vivienda','casa','techo','plástic','plastic'],
-  'Ropa y artículos del hogar':        ['ropa','cobija','frazada','zapato','utensilios','olla','plato','cubierto','manta','pañal','panal'],
-  'Herramientas y rescate':            ['pala','guante','herramienta','escombro','rescate','hacha','machete','cuerda'],
-  'Infraestructura y daños':['infraestructura','estructura','edificio','vía','puente','tubería','inspección','inspeccion','ingener','construcci','dañ'],
-  'Electricidad y comunicación':       ['electric','luz','generador','señal','senal','teléfono','telefono','comunicaci','batería','bateria','panel solar','carga','linterna'],
-  'Transporte y acceso':               ['transport','vehículo','vehiculo','camión','camion','carretera','acceso','evacuaci','ambulanci','gasolina','combustib'],
-  'Protección de vulnerables':  ['niño','nino','adulto mayor','ancian','embarazad','discapacidad','menor','bebé','bebe','abuela'],
-  'Apoyo psicosocial':                 ['psicol','trauma','mental','apoyo emocional','duelo'],
+  'Salud y atención médica':                ['medicin','médic','salud','antibiótic','hospital','enfermer','herida','venda','suero','pastilla','doctor','botiquín','primeros auxilios','insulina','cirugía','analgésic','analgesi'],
+  'Agua y saneamiento':                     ['agua','potable','saneamiento','higiene','jabón','jabon','filtro','purificad','cloro'],
+  'Alimentos':                              ['aliment','comida','arroz','harina','frijol','pasta','leche','fórmula','formula','nutrici','conserva','sardina','aceite','azúcar','azucar','lata'],
+  'Refugio y vivienda':                     ['refugio','albergue','carpa','lona','vivienda','casa','techo','plástic','plastic'],
+  'Ropa y artículos del hogar':             ['ropa','cobija','frazada','zapato','utensilios','olla','plato','cubierto','manta','pañal','panal'],
+  'Herramientas y rescate':                 ['pala','guante','herramienta','escombro','rescate','hacha','machete','cuerda'],
+  'Infraestructura y daños estructurales':  ['infraestructura','estructura','edificio','vía','via','puente','tubería','tuberia','inspección','inspeccion','ingener','construcci','dañ','daño','dano'],
+  'Electricidad y comunicación':            ['electric','luz','generador','señal','senal','teléfono','telefono','comunicaci','batería','bateria','panel solar','carga','linterna'],
+  'Transporte y acceso':                    ['transport','vehículo','vehiculo','camión','camion','carretera','acceso','evacuaci','ambulanci','gasolina','combustib'],
 };
 
+// Returns a single best-match category (for filters/tables)
 function categorize(text) {
   if (!text) return 'Otra';
   const t = text.toLowerCase();
+  for (const cat of CATEGORIES) {
+    if (t.includes(cat.toLowerCase())) return cat;
+  }
   for (const [cat, kws] of Object.entries(KEYWORDS)) {
     if (kws.some(k => t.includes(k))) return cat;
   }
   return 'Otra';
+}
+
+// Returns ALL matched categories (for bar chart — one entry can count in multiple)
+function extractCategories(text) {
+  if (!text) return [];
+  const t = text.toLowerCase();
+  const found = new Set();
+  // Direct name match first (handles red form which embeds category names)
+  for (const cat of CATEGORIES) {
+    if (t.includes(cat.toLowerCase())) found.add(cat);
+  }
+  // Keyword match (handles green form free text)
+  for (const [cat, kws] of Object.entries(KEYWORDS)) {
+    if (kws.some(k => t.includes(k))) found.add(cat);
+  }
+  return [...found];
 }
 
 
@@ -447,7 +464,7 @@ function init() {
       ...orangeData.map(r => r.estado),
     ])].filter(Boolean).sort();
     fillSelect('f-estado', estados);
-    fillSelect('f-categoria', CATEGORIES.slice(0,-1)); // exclude 'Otra'
+    fillSelect('f-categoria', CATEGORIES);
     ['f-estado','f-categoria','f-refugio'].forEach(id =>
       document.getElementById(id).addEventListener('change', render)
     );
@@ -514,8 +531,7 @@ async function renderMap() {
   // ── GREEN: peticiones (geocode Lugar) ──
   for (const r of fGreen) {
     if (!r.lugar) continue;
-    const cat = categorize(r.peticion);
-    const popup = `<b style="color:#2e7d32">Petición de ayuda</b><br><b>${esc(r.lugar)}</b><br>${esc(r.peticion)}<br><small>${r.fecha}</small>`;
+    const popup = `<b style="color:#2e7d32">Petición de ayuda</b><br><b>${esc(r.lugar)}</b><br><small>${r.fecha}</small>`;
     let ll = await geocode(r.lugar);
     if (!ll) ll = fallbackLatLng(extractEstado(r.lugar), r.lugar);
     if (!ll) continue;
@@ -574,15 +590,14 @@ function extractEstado(lugar) {
 // ═══════════════════════════════════════════════════════════
 function renderBarChart() {
   const counts = {};
+  CATEGORIES.forEach(c => { counts[c] = 0; });
   fGreen.forEach(r => {
-    const cat = categorize(r.peticion);
-    counts[cat] = (counts[cat]||0) + 1;
+    extractCategories(r.peticion).forEach(c => { if (counts[c] !== undefined) counts[c]++; });
   });
   fRed.forEach(r => {
-    const cat = r.categoria || categorize(r.necesidades) || 'Otra';
-    counts[cat] = (counts[cat]||0) + 1;
+    extractCategories(r.categoria || r.necesidades || '').forEach(c => { if (counts[c] !== undefined) counts[c]++; });
   });
-  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const sorted = Object.entries(counts).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
   if (barChart) barChart.destroy();
   barChart = new Chart(document.getElementById('bar-chart').getContext('2d'), {
     type: 'bar',
