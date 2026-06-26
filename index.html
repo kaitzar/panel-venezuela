@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Situación — Terremotos Venezuela</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f4f4; color: #222; }
+
+/* ── HEADER ── */
+header {
+  background: linear-gradient(135deg, #b71c1c 0%, #880e0e 100%);
+  color: #fff; padding: 1rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+}
+.header-left h1 { font-size: 1.15rem; font-weight: 700; }
+.header-left p  { font-size: 0.78rem; opacity: 0.85; margin-top: 0.2rem; }
+.header-right   { font-size: 0.75rem; opacity: 0.75; text-align: right; }
+
+/* ── BANNERS ── */
+.info-banner {
+  background: #ffebee; border-bottom: 2px solid #e53935; color: #4a0000;
+  padding: 0.65rem 1.5rem; font-size: 0.85rem;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.info-banner a { color: #b71c1c; font-weight: 700; text-decoration: underline; }
+.config-banner {
+  background: #fff8e1; border-bottom: 2px solid #ffc107; color: #795548;
+  padding: 0.6rem 1.5rem; font-size: 0.82rem; display: none; align-items: center; gap: 0.5rem;
+}
+
+/* ── FILTERS ── */
+.filters {
+  background: #fff; border-bottom: 1px solid #e0e0e0;
+  padding: 0.65rem 1.5rem; display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center;
+}
+.filter-group { display: flex; align-items: center; gap: 0.3rem; }
+.filter-group label { font-size: 0.72rem; font-weight: 700; color: #777; white-space: nowrap; }
+.filter-group select {
+  font-size: 0.8rem; padding: 0.3rem 0.5rem;
+  border: 1px solid #ccc; border-radius: 5px; background: #fafafa; max-width: 180px;
+}
+.btn-clear {
+  font-size: 0.75rem; color: #b71c1c; cursor: pointer;
+  background: none; border: 1px solid #b71c1c; border-radius: 5px; padding: 0.25rem 0.6rem; margin-left: auto;
+}
+.btn-clear:hover { background: #ffebee; }
+
+/* ── STATS ── */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.7rem; padding: 1rem 1.5rem 0.75rem; }
+.stat-card {
+  background: #fff; border-radius: 8px; padding: 0.85rem 1rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07); text-align: center;
+}
+.stat-card .value { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.stat-card .label { font-size: 0.7rem; color: #777; margin-top: 0.3rem; }
+.stat-card.s-green  { border-top: 3px solid #2e7d32; } .stat-card.s-green  .value { color: #2e7d32; }
+.stat-card.s-red    { border-top: 3px solid #b71c1c; } .stat-card.s-red    .value { color: #b71c1c; }
+.stat-card.s-orange { border-top: 3px solid #e65100; } .stat-card.s-orange .value { color: #e65100; }
+.stat-card.s-blue   { border-top: 3px solid #1565c0; } .stat-card.s-blue   .value { color: #1565c0; }
+
+/* ── CHARTS GRID ── */
+.charts-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0.75rem; padding: 0 1.5rem 0.75rem; }
+.chart-box {
+  background: #fff; border-radius: 8px; padding: 1rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.chart-box h3 { font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 0.7rem; }
+#map { height: 400px; border-radius: 6px; }
+
+/* ── LAYER TOGGLES ── */
+.layer-toggles { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.layer-btn {
+  font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.65rem;
+  border-radius: 12px; border: 2px solid; cursor: pointer; opacity: 0.4; transition: opacity .2s;
+  background: #fff;
+}
+.layer-btn.active { opacity: 1; }
+.layer-btn.lg { border-color: #2e7d32; color: #2e7d32; }
+.layer-btn.lr { border-color: #b71c1c; color: #b71c1c; }
+.layer-btn.lo { border-color: #e65100; color: #e65100; }
+
+/* ── LINE + SINGLE ROW ── */
+.single-row { padding: 0 1.5rem 0.75rem; }
+.single-row .chart-box { }
+
+/* ── TABLES ── */
+.table-section { padding: 0 1.5rem 0.75rem; }
+.table-section:last-child { padding-bottom: 2rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+th {
+  background: #f5f5f5; padding: 0.5rem 0.75rem; text-align: left;
+  font-weight: 700; color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap;
+}
+td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+tr:hover td { background: #fafafa; }
+.badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
+  font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+}
+.b-red    { background:#ffebee; color:#c62828; }
+.b-amber  { background:#fff8e1; color:#e65100; }
+.b-green  { background:#e8f5e9; color:#2e7d32; }
+.b-blue   { background:#e3f2fd; color:#1565c0; }
+.b-orange { background:#fff3e0; color:#e65100; }
+.empty-msg { text-align:center; color:#aaa; font-size:0.85rem; padding:2rem 1rem; }
+.section-label {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: #999; margin-bottom: 0.4rem; padding: 0 1.5rem;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .charts-row { grid-template-columns: 1fr; }
+  header, .stats, .charts-row, .single-row, .table-section, .section-label, .filters {
+    padding-left: 0.75rem; padding-right: 0.75rem;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <div class="header-left">
+    <h1>🆘 Panel de Situación — Terremotos Venezuela</h1>
+    <p>Alimenta La Solidaridad &nbsp;·&nbsp; <a href="https://alimentalasolidaridad.org" target="_blank" style="color:#ffcdd2;text-decoration:none;">alimentalasolidaridad.org</a> &nbsp;·&nbsp; <a href="https://instagram.com/alimentalasolidaridad" target="_blank" style="color:#ffcdd2;text-decoration:none;">@alimentalasolidaridad</a></p>
+  </div>
+  <div class="header-right" id="last-updated">Cargando datos...</div>
+</header>
+
+<!-- ═══ INFO BANNER ═══ -->
+<!-- ═══ CONFIG BANNER ═══ -->
+<div id="config-banner" class="config-banner">
+  ⚠️ Mostrando datos de ejemplo. Reemplaza las URLs en la sección de configuración del código.
+</div>
+
+<!-- ═══ FILTERS ═══ -->
+<div class="filters">
+  <div class="filter-group">
+    <label>ESTADO</label>
+    <select id="f-estado"><option value="">Todos</option></select>
+  </div>
+  <div class="filter-group">
+    <label>CATEGORÍA</label>
+    <select id="f-categoria"><option value="">Todas</option></select>
+  </div>
+  <div class="filter-group">
+    <label>REFUGIO</label>
+    <select id="f-refugio">
+      <option value="">Todos</option>
+      <option value="Sí">Sí</option>
+      <option value="No">No</option>
+      <option value="No se sabe">No se sabe</option>
+    </select>
+  </div>
+  <button class="btn-clear" id="clear-filters">✕ Limpiar filtros</button>
+</div>
+
+<!-- ═══ STATS ═══ -->
+<div class="stats">
+  <div class="stat-card s-green">
+    <div class="value" id="s-peticiones">—</div>
+    <div class="label">Peticiones de ayuda</div>
+  </div>
+  <div class="stat-card s-red">
+    <div class="value" id="s-comunidades">—</div>
+    <div class="label">Comunidades reportadas</div>
+  </div>
+  <div class="stat-card s-red">
+    <div class="value" id="s-afectados">—</div>
+    <div class="label">Personas afectadas</div>
+  </div>
+  <div class="stat-card s-orange">
+    <div class="value" id="s-desaparecidos">—</div>
+    <div class="label">Personas desaparecidas</div>
+  </div>
+  <div class="stat-card s-blue">
+    <div class="value" id="s-refugio">—</div>
+    <div class="label">Con refugio confirmado</div>
+  </div>
+  <div class="stat-card s-orange">
+    <div class="value" id="s-alivio">—</div>
+    <div class="label">Centros de acopio registrados</div>
+  </div>
+</div>
+
+<!-- ═══ MAP + BAR CHART ═══ -->
+<div class="charts-row">
+  <div class="chart-box">
+    <h3>📍 Mapa de situación</h3>
+    <div class="layer-toggles">
+      <button class="layer-btn lg active" id="toggle-green" onclick="toggleLayer('green')">● Peticiones de ayuda</button>
+      <button class="layer-btn lr active" id="toggle-red"   onclick="toggleLayer('red')">● Reportes líderes comunitarios</button>
+      <button class="layer-btn lo active" id="toggle-orange" onclick="toggleLayer('orange')">● Centros de acopio registrados</button>
+    </div>
+    <div id="map"></div>
+  </div>
+  <div class="chart-box">
+    <h3>📊 Necesidades más urgentes</h3>
+    <canvas id="bar-chart"></canvas>
+  </div>
+</div>
+
+<!-- ═══ LINE CHART ═══ -->
+<div class="single-row">
+  <div class="chart-box">
+    <h3>📈 Evolución acumulada — Personas afectadas y desaparecidas (Reportes de líderes)</h3>
+    <canvas id="line-chart"></canvas>
+  </div>
+</div>
+
+<!-- ═══ TABLE 1: PETICIONES + REPORTES ═══ -->
+<div class="section-label">Peticiones de ayuda y reportes de líderes comunitarios</div>
+<div class="table-section">
+  <div class="chart-box">
+    <div id="table-main"><p class="empty-msg">Cargando...</p></div>
+  </div>
+</div>
+
+<!-- ═══ TABLE 2: PUNTOS DE ALIVIO ═══ -->
+<div class="section-label">Centros de acopio registrados identificados</div>
+<div class="table-section">
+  <div class="chart-box">
+    <div id="table-orange"><p class="empty-msg">Cargando...</p></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIGURACIÓN — reemplaza con tus URLs de Google Sheets
+//  (Archivo → Compartir → Publicar en la web → CSV)
+// ═══════════════════════════════════════════════════════════
+const SHEETS = {
+  green:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSrVNEmmQIZH1Hs-No_X-CTs6jaQvEAZyjak1eaPrFcFsst4J3YX8CG0e8lKrZDkVgOYP5xPOBEBWbJ/pub?output=csv',
+  red:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vT0gMOsukKnjoXFkFAJw7nDaxJ8M_wJl9BP8N5KuV8HFDwVDE8xqHBipM1QHBVhdd3En_VW8WJrtJTF/pub?output=csv',
+  orange: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTyw3GgyvJmk2s4M4FzoS8YLDfJdM0jREbV1sMXT6mnNUk0wQo0XAnU4qa7Xt8C6ETM_PKok60iq6HJ/pub?output=csv',
+};
+const REFRESH_MS = 5 * 60 * 1000;
+
+// ── CENTROIDES VENEZOLANOS ──
+const ESTADO_COORDS = {
+  'Amazonas':[-66.0,4.0],'Anzoátegui':[-64.5,9.5],'Apure':[-68.0,7.5],
+  'Aragua':[-67.2,10.2],'Barinas':[-70.2,8.6],'Bolívar':[-63.5,6.5],
+  'Carabobo':[-68.1,10.1],'Cojedes':[-68.3,9.4],'Delta Amacuro':[-61.5,8.9],
+  'Dependencias Federales':[-66.8,11.8],'Distrito Capital':[-66.9,10.5],
+  'Falcón':[-69.0,11.5],'Guárico':[-66.5,8.8],'La Guaira (Vargas)':[-67.1,10.6],
+  'Lara':[-69.5,10.2],'Mérida':[-71.0,8.6],'Miranda':[-66.5,10.4],
+  'Monagas':[-63.3,9.5],'Nueva Esparta':[-63.9,11.0],'Portuguesa':[-69.2,9.1],
+  'Sucre':[-63.3,10.4],'Táchira':[-72.0,7.9],'Trujillo':[-70.4,9.4],
+  'Yaracuy':[-68.8,10.4],'Zulia':[-72.4,10.3],
+};
+
+// ── CATEGORÍAS Y KEYWORDS ──
+const CATEGORIES = [
+  'Salud y atención médica','Agua y saneamiento','Alimentos',
+  'Refugio y vivienda','Ropa y artículos del hogar',
+  'Herramientas y rescate','Infraestructura y daños',
+  'Electricidad y comunicación','Transporte y acceso',
+  'Protección de vulnerables','Apoyo psicosocial','Otra',
+];
+const KEYWORDS = {
+  'Salud y atención médica':           ['medicin','médic','salud','antibiótic','hospital','enfermer','herida','venda','suero','pastilla','doctor','botiquín','primeros auxilios','insulina','cirugía','analgésic','analgesi'],
+  'Agua y saneamiento':                ['agua','potable','saneamiento','higiene','jabón','jabon','filtro','purificad','cloro'],
+  'Alimentos':                         ['aliment','comida','arroz','harina','frijol','pasta','leche','fórmula','formula','nutrici','conserva','sardina','aceite','azúcar','azucar','lata'],
+  'Refugio y vivienda':                ['refugio','albergue','carpa','lona','vivienda','casa','techo','plástic','plastic'],
+  'Ropa y artículos del hogar':        ['ropa','cobija','frazada','zapato','utensilios','olla','plato','cubierto','manta','pañal','panal'],
+  'Herramientas y rescate':            ['pala','guante','herramienta','escombro','rescate','hacha','machete','cuerda'],
+  'Infraestructura y daños':['infraestructura','estructura','edificio','vía','puente','tubería','inspección','inspeccion','ingener','construcci','dañ'],
+  'Electricidad y comunicación':       ['electric','luz','generador','señal','senal','teléfono','telefono','comunicaci','batería','bateria','panel solar','carga','linterna'],
+  'Transporte y acceso':               ['transport','vehículo','vehiculo','camión','camion','carretera','acceso','evacuaci','ambulanci','gasolina','combustib'],
+  'Protección de vulnerables':  ['niño','nino','adulto mayor','ancian','embarazad','discapacidad','menor','bebé','bebe','abuela'],
+  'Apoyo psicosocial':                 ['psicol','trauma','mental','apoyo emocional','duelo'],
+};
+
+function categorize(text) {
+  if (!text) return 'Otra';
+  const t = text.toLowerCase();
+  for (const [cat, kws] of Object.entries(KEYWORDS)) {
+    if (kws.some(k => t.includes(k))) return cat;
+  }
+  return 'Otra';
+}
+
+
+// ── STATE ──
+let greenData = [], redData = [], orangeData = [];
+let fGreen = [], fRed = [], fOrange = [];
+let leafletMap;
+let layers = { green: null, red: null, orange: null };
+let layerVisible = { green: true, red: true, orange: true };
+let barChart, lineChart;
+let geoCache = {};
+let geoQueue = [], geoProcessing = false;
+const jitterSeed = {};
+
+// ═══════════════════════════════════════════════════════════
+//  GEOCODING (rate-limited, sessionStorage cached)
+// ═══════════════════════════════════════════════════════════
+function loadGeoCache() {
+  try { const s = sessionStorage.getItem('vzGeoCache'); if (s) geoCache = JSON.parse(s); } catch(e) {}
+}
+function saveGeoCache() {
+  try { sessionStorage.setItem('vzGeoCache', JSON.stringify(geoCache)); } catch(e) {}
+}
+function getJitter(key) {
+  if (!jitterSeed[key]) {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (Math.imul(31, h) + key.charCodeAt(i)) | 0;
+    jitterSeed[key] = ((h % 1000) / 1000 - 0.5) * 0.5;
+  }
+  return jitterSeed[key];
+}
+function geocode(query) {
+  const key = query.toLowerCase().trim();
+  if (geoCache[key]) return Promise.resolve(geoCache[key]);
+  return new Promise(resolve => {
+    geoQueue.push({ query, key, resolve });
+    if (!geoProcessing) processGeoQueue();
+  });
+}
+async function processGeoQueue() {
+  geoProcessing = true;
+  while (geoQueue.length > 0) {
+    const { query, key, resolve } = geoQueue.shift();
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Venezuela')}&format=json&limit=1`;
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      const json = await resp.json();
+      if (json[0]) {
+        const r = [parseFloat(json[0].lat), parseFloat(json[0].lon)];
+        geoCache[key] = r; saveGeoCache(); resolve(r);
+      } else { resolve(null); }
+    } catch(e) { resolve(null); }
+    await new Promise(r => setTimeout(r, 1100));
+  }
+  geoProcessing = false;
+}
+function fallbackLatLng(estado, seed) {
+  const c = ESTADO_COORDS[estado];
+  if (!c) return null;
+  return [c[1] + getJitter(seed + 'y') * 0.5, c[0] + getJitter(seed + 'x') * 0.5];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DATA LOADING
+// ═══════════════════════════════════════════════════════════
+async function fetchCSV(url) {
+  const res = await fetch(url);
+  const text = await res.text();
+  return Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+}
+function parseDate(ts) {
+  if (!ts) return '';
+  const m = ts.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return ts.slice(0,10);
+}
+function parseNum(v) { return parseInt((v||'').replace(/[.,]/g,'').replace(/\D/g,'')) || 0; }
+
+async function loadData() {
+  try {
+    const [gRaw, rRaw, oRaw] = await Promise.all([
+      SHEETS.green  ? fetchCSV(SHEETS.green)  : Promise.resolve([]),
+      SHEETS.red    ? fetchCSV(SHEETS.red)    : Promise.resolve([]),
+      SHEETS.orange ? fetchCSV(SHEETS.orange) : Promise.resolve([]),
+    ]);
+    greenData = gRaw.map(r => ({
+      fecha:   parseDate(r['Timestamp'] || r['Marca temporal'] || ''),
+      lugar:   (r['Lugar'] || '').trim(),
+      peticion:(r['Petición'] || r['Peticion'] || '').trim(),
+    })).filter(r => r.lugar || r.peticion);
+
+    redData = rRaw.map(r => ({
+      fecha:          parseDate(r['Timestamp'] || r['Marca temporal'] || ''),
+      comunidad:      (r['Comunidad'] || '').trim(),
+      municipio:      (r['Municipio'] || '').trim(),
+      estado:         (r['Estado'] || '').trim(),
+      afectados:      parseNum(r['Número de afectados'] || r['Numero de afectados'] || '0'),
+      desaparecidos:  parseNum(r['Número de desaparecidos'] || r['Numero de desaparecidos'] || '0'),
+      refugio:        (r['Hay refugio?'] || r['¿Hay refugio?'] || '').trim(),
+      necesidades:    (r['Detalla tus necesidades principales'] || '').trim(),
+      categoria:      (r['Categoría de necesidad principal'] || r['Categoria de necesidad principal'] || '').trim(),
+      refugioUbicacion:(r['Si hay refugio, ¿dónde está?'] || '').trim(),
+    })).filter(r => r.comunidad);
+
+    orangeData = oRaw.map(r => ({
+      fecha:          parseDate(r['Timestamp'] || r['Marca temporal'] || ''),
+      ubicacion:      (r['Ubicación del punto de alivio'] || r['Ubicacion del punto de alivio'] || '').trim(),
+      recolecta:      (r['Información de qué están recolectando / solicitando'] || '').trim(),
+      contactoNombre: (r['Nombre de persona de contacto (si está disponible)'] || '').trim(),
+      contactoInfo:   (r['Contacto de persona de contacto (correo electrónico o WhatsApp)'] || '').trim(),
+      estado:         (r['Estado'] || '').trim(),
+      fuente:         (r['Fuente de información'] || '').trim(),
+    })).filter(r => r.ubicacion);
+
+    document.getElementById('last-updated').textContent =
+      'Actualizado: ' + new Date().toLocaleString('es-VE', {dateStyle:'short', timeStyle:'short'});
+    init();
+  } catch(e) {
+    console.warn('Error cargando datos:', e);
+    document.getElementById('last-updated').textContent = 'Error al cargar datos. Recarga la página.';
+    init();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILTERS
+// ═══════════════════════════════════════════════════════════
+function getFilters() {
+  return {
+    estado:   document.getElementById('f-estado').value,
+    categoria:document.getElementById('f-categoria').value,
+    refugio:  document.getElementById('f-refugio').value,
+  };
+}
+function applyFilters() {
+  const f = getFilters();
+  fGreen = greenData.filter(r => {
+    if (f.estado && !r.lugar.toLowerCase().includes(f.estado.toLowerCase())) return false;
+    if (f.categoria && categorize(r.peticion) !== f.categoria) return false;
+    return true;
+  });
+  fRed = redData.filter(r => {
+    if (f.estado && r.estado !== f.estado) return false;
+    if (f.categoria && r.categoria !== f.categoria) return false;
+    if (f.refugio && r.refugio !== f.refugio) return false;
+    return true;
+  });
+  fOrange = orangeData.filter(r => {
+    if (f.estado && r.estado !== f.estado) return false;
+    return true;
+  });
+}
+
+let inited = false;
+function init() {
+  if (!inited) {
+    // Populate filter dropdowns
+    const estados = [...new Set([
+      ...redData.map(r => r.estado),
+      ...orangeData.map(r => r.estado),
+    ])].filter(Boolean).sort();
+    fillSelect('f-estado', estados);
+    fillSelect('f-categoria', CATEGORIES.slice(0,-1)); // exclude 'Otra'
+    ['f-estado','f-categoria','f-refugio'].forEach(id =>
+      document.getElementById(id).addEventListener('change', render)
+    );
+    document.getElementById('clear-filters').addEventListener('click', () => {
+      ['f-estado','f-categoria','f-refugio'].forEach(id => document.getElementById(id).value = '');
+      render();
+    });
+    inited = true;
+  }
+  render();
+}
+function fillSelect(id, values) {
+  const el = document.getElementById(id);
+  const cur = el.value;
+  el.innerHTML = `<option value="">Todos</option>` + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  if (values.includes(cur)) el.value = cur;
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ═══════════════════════════════════════════════════════════
+//  STATS
+// ═══════════════════════════════════════════════════════════
+function renderStats() {
+  const fmt = n => n.toLocaleString('es-VE');
+  document.getElementById('s-peticiones').textContent   = fmt(fGreen.length);
+  document.getElementById('s-comunidades').textContent  = fmt(fRed.length);
+  document.getElementById('s-afectados').textContent    = fmt(fRed.reduce((s,r) => s+r.afectados, 0));
+  document.getElementById('s-desaparecidos').textContent= fmt(fRed.reduce((s,r) => s+r.desaparecidos, 0));
+  document.getElementById('s-refugio').textContent      = fmt(fRed.filter(r => r.refugio==='Sí').length);
+  document.getElementById('s-alivio').textContent       = fmt(fOrange.length);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAP
+// ═══════════════════════════════════════════════════════════
+function initMap() {
+  leafletMap = L.map('map', { center: [8.0, -66.5], zoom: 5 });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 18
+  }).addTo(leafletMap);
+  layers.green  = L.layerGroup().addTo(leafletMap);
+  layers.red    = L.layerGroup().addTo(leafletMap);
+  layers.orange = L.layerGroup().addTo(leafletMap);
+}
+function toggleLayer(name) {
+  layerVisible[name] = !layerVisible[name];
+  const btn = document.getElementById('toggle-' + name);
+  btn.classList.toggle('active', layerVisible[name]);
+  if (layerVisible[name]) { leafletMap.addLayer(layers[name]); }
+  else                    { leafletMap.removeLayer(layers[name]); }
+}
+function dotIcon(color) {
+  return L.divIcon({
+    html: `<div style="width:13px;height:13px;background:${color};border:2.5px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>`,
+    iconSize:[13,13], iconAnchor:[6,6], className:''
+  });
+}
+
+async function renderMap() {
+  layers.green.clearLayers();
+  layers.red.clearLayers();
+  layers.orange.clearLayers();
+
+  // ── GREEN: peticiones (geocode Lugar) ──
+  for (const r of fGreen) {
+    if (!r.lugar) continue;
+    const cat = categorize(r.peticion);
+    const popup = `<b style="color:#2e7d32">Petición de ayuda</b><br><b>${esc(r.lugar)}</b><br>${esc(r.peticion)}<br><small>${r.fecha}</small>`;
+    let ll = await geocode(r.lugar);
+    if (!ll) ll = fallbackLatLng(extractEstado(r.lugar), r.lugar);
+    if (!ll) continue;
+    L.marker(ll, { icon: dotIcon('#2e7d32') }).addTo(layers.green).bindPopup(popup);
+  }
+
+  // ── RED: community reports (aggregated by comunidad+municipio+estado) ──
+  const redAgg = {};
+  fRed.forEach(r => {
+    const key = `${r.comunidad}|${r.municipio}|${r.estado}`;
+    if (!redAgg[key]) redAgg[key] = { ...r, afectados: 0, desaparecidos: 0, count: 0 };
+    redAgg[key].afectados    += r.afectados;
+    redAgg[key].desaparecidos += r.desaparecidos;
+    redAgg[key].count++;
+  });
+  for (const [key, r] of Object.entries(redAgg)) {
+    const q = `${r.comunidad}, ${r.municipio}, ${r.estado}`;
+    let ll = await geocode(q);
+    if (!ll) ll = fallbackLatLng(r.estado, key);
+    if (!ll) continue;
+    const refugioLine = r.refugio === 'Sí'
+      ? `✅ Refugio: ${r.refugioUbicacion || 'Sí'}` : `❌ Sin refugio`;
+    const popup = `<b style="color:#b71c1c">Reporte comunitario</b><br><b>${esc(r.comunidad)}</b>, ${esc(r.municipio)}<br>` +
+      `Afectados: <b>${r.afectados.toLocaleString('es-VE')}</b> | Desaparecidos: <b>${r.desaparecidos.toLocaleString('es-VE')}</b><br>` +
+      `${refugioLine}<br>Categoría: ${esc(r.categoria)}<br><small>${r.fecha}</small>`;
+    const color = r.desaparecidos > 0 ? '#c62828' : r.refugio !== 'Sí' ? '#e53935' : '#ef9a9a';
+    const radius = 8 + Math.min(r.afectados / 20, 20);
+    L.circleMarker(ll, { radius, color:'#880e0e', weight:1.5, fillColor:color, fillOpacity:0.75 })
+      .addTo(layers.red).bindPopup(popup);
+  }
+
+  // ── ORANGE: puntos de alivio (geocode Ubicación) ──
+  for (const r of fOrange) {
+    if (!r.ubicacion) continue;
+    const popup = `<b style="color:#e65100">Punto de alivio</b><br><b>${esc(r.ubicacion)}</b><br>` +
+      `${esc(r.recolecta)}` +
+      `<br><small>${r.fecha}</small>`;
+    let ll = await geocode(r.ubicacion);
+    if (!ll) ll = fallbackLatLng(r.estado, r.ubicacion);
+    if (!ll) continue;
+    L.marker(ll, { icon: dotIcon('#e65100') }).addTo(layers.orange).bindPopup(popup);
+  }
+}
+
+// Extract a Venezuelan estado name from a free-text location string
+function extractEstado(lugar) {
+  const t = lugar.toLowerCase();
+  for (const est of Object.keys(ESTADO_COORDS)) {
+    if (t.includes(est.toLowerCase())) return est;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BAR CHART — combined needs (green keyword-matched + red category)
+// ═══════════════════════════════════════════════════════════
+function renderBarChart() {
+  const counts = {};
+  fGreen.forEach(r => {
+    const cat = categorize(r.peticion);
+    counts[cat] = (counts[cat]||0) + 1;
+  });
+  fRed.forEach(r => {
+    const cat = r.categoria || categorize(r.necesidades) || 'Otra';
+    counts[cat] = (counts[cat]||0) + 1;
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(([k]) => k),
+      datasets: [{
+        data: sorted.map(([,v]) => v),
+        backgroundColor: sorted.map(([,],i) => i === 0 ? '#b71c1c' : `rgba(183,28,28,${0.75 - i*0.05})`),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true,
+      plugins: { legend:{ display:false } },
+      scales: {
+        x: { grid:{ display:false }, ticks:{ font:{ size:11 } } },
+        y: { ticks:{ font:{ size:10 } } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LINE CHART — daily cumulative from red form
+// ═══════════════════════════════════════════════════════════
+function renderLineChart() {
+  const byDate = {};
+  fRed.forEach(r => {
+    const d = r.fecha || 'Sin fecha';
+    if (!byDate[d]) byDate[d] = { af:0, des:0 };
+    byDate[d].af  += r.afectados;
+    byDate[d].des += r.desaparecidos;
+  });
+  const dates = Object.keys(byDate).sort();
+  let cumAf = 0, cumDes = 0;
+  const afData = [], desData = [];
+  dates.forEach(d => { cumAf += byDate[d].af; cumDes += byDate[d].des; afData.push(cumAf); desData.push(cumDes); });
+  if (lineChart) lineChart.destroy();
+  lineChart = new Chart(document.getElementById('line-chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [
+        { label:'Personas afectadas (acumulado)',    data:afData,  borderColor:'#1565c0', backgroundColor:'rgba(21,101,192,.1)',  tension:0.3, fill:true, pointRadius:4 },
+        { label:'Personas desaparecidas (acumulado)',data:desData, borderColor:'#e65100', backgroundColor:'rgba(230,81,0,.1)',     tension:0.3, fill:true, pointRadius:4 },
+      ]
+    },
+    options: {
+      responsive:true, interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 } } } },
+      scales:{ x:{ ticks:{ font:{ size:11 } } }, y:{ beginAtZero:true, ticks:{ font:{ size:11 } } } }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABLES
+// ═══════════════════════════════════════════════════════════
+function renderMainTable() {
+  const el = document.getElementById('table-main');
+  // Merge green + red with source tag
+  const rows = [
+    ...fGreen.map(r => ({ tipo:'green', fecha:r.fecha, lugar:r.lugar, estado:'—', afectados:'—', desaparecidos:'—', necesidad:r.peticion, categoria:categorize(r.peticion), refugio:'—' })),
+    ...fRed.map(r   => ({ tipo:'red',   fecha:r.fecha, lugar:`${r.comunidad}, ${r.municipio}`, estado:r.estado, afectados:r.afectados, desaparecidos:r.desaparecidos, necesidad:r.necesidades, categoria:r.categoria, refugio:r.refugio })),
+  ].sort((a,b) => b.fecha.localeCompare(a.fecha));
+
+  if (!rows.length) { el.innerHTML = '<p class="empty-msg">No hay datos para los filtros seleccionados.</p>'; return; }
+
+  const html = rows.map(r => {
+    const tag = r.tipo === 'green'
+      ? '<span class="badge b-green">Petición</span>'
+      : '<span class="badge b-red">Reporte</span>';
+    const prio = r.tipo === 'red'
+      ? (r.desaparecidos > 0 ? '<span class="badge b-red">⚠ Crítico</span>'
+        : r.refugio !== 'Sí'  ? '<span class="badge b-amber">Atención</span>'
+        : '<span class="badge b-green">Estable</span>')
+      : '';
+    const af  = r.afectados   === '—' ? '—' : Number(r.afectados).toLocaleString('es-VE');
+    const des = r.desaparecidos=== '—' ? '—' : Number(r.desaparecidos).toLocaleString('es-VE');
+    return `<tr>
+      <td>${r.fecha||'—'}</td>
+      <td>${tag}</td>
+      <td><b>${esc(r.lugar)}</b></td>
+      <td>${esc(r.estado)}</td>
+      <td>${af}</td>
+      <td>${des}</td>
+      <td>${esc(r.categoria)}</td>
+      <td>${esc(r.necesidad)}</td>
+      <td>${prio}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table><thead><tr>
+    <th>Fecha</th><th>Tipo</th><th>Lugar</th><th>Estado</th>
+    <th>Afectados</th><th>Desaparecidos</th><th>Categoría</th><th>Detalle</th><th>Prioridad</th>
+  </tr></thead><tbody>${html}</tbody></table>`;
+}
+
+function renderOrangeTable() {
+  const el = document.getElementById('table-orange');
+  if (!fOrange.length) { el.innerHTML = '<p class="empty-msg">No hay puntos de alivio para los filtros seleccionados.</p>'; return; }
+  const html = fOrange.map(r => {
+    return `<tr>
+      <td>${r.fecha||'—'}</td>
+      <td><b>${esc(r.ubicacion)}</b></td>
+      <td>${esc(r.recolecta)}</td>
+      <td>${esc(r.estado||'—')}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table><thead><tr>
+    <th>Fecha</th><th>Ubicación</th><th>Qué recolectan</th><th>Estado</th>
+  </tr></thead><tbody>${html}</tbody></table>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER ALL
+// ═══════════════════════════════════════════════════════════
+async function render() {
+  applyFilters();
+  renderStats();
+  renderBarChart();
+  renderLineChart();
+  renderMainTable();
+  renderOrangeTable();
+  await renderMap();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BOOTSTRAP
+// ═══════════════════════════════════════════════════════════
+loadGeoCache();
+initMap();
+loadData();
+if (SHEETS.green || SHEETS.red || SHEETS.orange) setInterval(loadData, REFRESH_MS);
+</script>
+</body>
+</html>
