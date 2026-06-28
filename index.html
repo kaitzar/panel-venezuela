@@ -210,7 +210,7 @@ tr:hover td { background: #fafafa; }
 <!-- ═══ LINE CHART ═══ -->
 <div class="single-row">
   <div class="chart-box">
-    <h3>📈 Evolución acumulada — Personas afectadas y desaparecidas (Reportes de líderes)</h3>
+    <h3>👥 Personas afectadas por ciudad (Reportes de líderes)</h3>
     <canvas id="line-chart"></canvas>
   </div>
 </div>
@@ -621,34 +621,40 @@ function renderBarChart() {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  LINE CHART — daily cumulative from red form
+//  CITY BAR CHART — afectados per city from red form
 // ═══════════════════════════════════════════════════════════
 function renderLineChart() {
-  const byDate = {};
+  const byCity = {};
   fRed.forEach(r => {
-    const d = r.fecha || 'Sin fecha';
-    if (!byDate[d]) byDate[d] = { af:0, des:0 };
-    byDate[d].af  += r.afectados;
-    byDate[d].des += r.desaparecidos;
+    const city = r.comunidad
+      ? `${r.comunidad}${r.municipio ? ', ' + r.municipio : ''}`
+      : (r.municipio || r.estado || 'Sin ubicación');
+    if (!byCity[city]) byCity[city] = 0;
+    byCity[city] += r.afectados;
   });
-  const dates = Object.keys(byDate).sort();
-  let cumAf = 0, cumDes = 0;
-  const afData = [], desData = [];
-  dates.forEach(d => { cumAf += byDate[d].af; cumDes += byDate[d].des; afData.push(cumAf); desData.push(cumDes); });
+  const sorted = Object.entries(byCity).sort((a, b) => b[1] - a[1]);
+  const labels = sorted.map(([k]) => k);
+  const data   = sorted.map(([, v]) => v);
   if (lineChart) lineChart.destroy();
   lineChart = new Chart(document.getElementById('line-chart').getContext('2d'), {
-    type: 'line',
+    type: 'bar',
     data: {
-      labels: dates,
-      datasets: [
-        { label:'Personas afectadas (acumulado)',    data:afData,  borderColor:'#1565c0', backgroundColor:'rgba(21,101,192,.1)',  tension:0.3, fill:true, pointRadius:4 },
-        { label:'Personas desaparecidas (acumulado)',data:desData, borderColor:'#e65100', backgroundColor:'rgba(230,81,0,.1)',     tension:0.3, fill:true, pointRadius:4 },
-      ]
+      labels,
+      datasets: [{
+        label: 'Personas afectadas',
+        data,
+        backgroundColor: data.map((_, i) => i === 0 ? '#1565c0' : `rgba(21,101,192,${0.8 - i * 0.04})`),
+        borderRadius: 4,
+      }]
     },
     options: {
-      responsive:true, interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 } } } },
-      scales:{ x:{ ticks:{ font:{ size:11 } } }, y:{ beginAtZero:true, ticks:{ font:{ size:11 } } } }
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { ticks: { font: { size: 11 } } }
+      }
     }
   });
 }
